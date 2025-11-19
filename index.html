@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Finance Tracker · Repository Website</title>
+  <meta name="description" content="Simple finance tracker built with HTML, CSS and JavaScript. Add incomes and expenses, see balances, and persist data with localStorage." />
+  <style>
+    :root{
+      --bg:#0f1724; --card:#0b1220; --muted:#9aa4b2; --accent:#4f46e5; --success:#10b981; --danger:#ef4444; --glass: rgba(255,255,255,0.03);
+      --radius:12px; --fw-medium:600;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0; font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial; color:#e6eef8; background:linear-gradient(180deg,#061022 0%, #07102a 100%); -webkit-font-smoothing:antialiased;
+      padding:32px; display:flex; align-items:center; justify-content:center;
+    }
+    .container{width:100%; max-width:1000px}
+    header{display:flex; align-items:center; justify-content:space-between; margin-bottom:18px}
+    header h1{font-size:20px; margin:0}
+    header p{margin:0; color:var(--muted); font-size:13px}
+
+    .grid{display:grid; grid-template-columns:1fr 360px; gap:18px}
+    .card{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); padding:18px; border-radius:var(--radius); box-shadow:0 6px 30px rgba(2,6,23,0.6);}
+
+    /* Left - main */
+    .balance{display:flex; align-items:center; justify-content:space-between; gap:12px}
+    .balance .amount{font-size:30px; font-weight:700}
+    .summary{display:flex; gap:12px; margin-top:14px}
+    .pill{flex:1; padding:12px; background:var(--glass); border-radius:10px; text-align:center}
+    .pill .label{font-size:12px; color:var(--muted)}
+    .pill .value{font-size:18px; font-weight:600}
+
+    form{display:flex; gap:8px; margin-top:14px}
+    form input, form select{padding:10px 12px; border-radius:8px; border:1px solid rgba(255,255,255,0.05); background:transparent; color:inherit; outline:none}
+    form input::placeholder{color:rgba(255,255,255,0.4)}
+    .btn{padding:10px 14px; border-radius:10px; background:var(--accent); border:none; color:white; cursor:pointer; font-weight:600}
+    .btn.secondary{background:transparent; border:1px solid rgba(255,255,255,0.06)}
+
+    .transactions{margin-top:18px}
+    .tx{display:flex; align-items:center; justify-content:space-between; padding:10px; border-radius:8px; margin-bottom:8px; background:linear-gradient(180deg, rgba(255,255,255,0.01), transparent)}
+    .tx .meta{display:flex; gap:12px; align-items:center}
+    .avatar{width:44px; height:44px; border-radius:10px; display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,0.03); font-weight:700}
+    .tx .desc{display:flex; flex-direction:column}
+    .tx .desc .title{font-weight:600}
+    .tx .desc .date{font-size:12px; color:var(--muted)}
+    .amount{font-weight:700}
+    .amount.negative{color:var(--danger)}
+    .amount.positive{color:var(--success)}
+    .small{font-size:12px; color:var(--muted)}
+
+    /* Right - sidebar */
+    .sidebar .chartWrap{display:flex; align-items:center; justify-content:center; padding:12px;}
+    canvas{max-width:100%; height:auto}
+
+    footer{margin-top:12px; color:var(--muted); font-size:13px; text-align:center}
+
+    @media (max-width:880px){
+      .grid{grid-template-columns:1fr;}
+      body{padding:20px}
+      .sidebar{order:-1}
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div>
+        <h1>Finance Tracker</h1>
+        <p>Repository demo · HTML · CSS · JavaScript · LocalStorage</p>
+      </div>
+      <div class="small">Balance updates in real time</div>
+    </header>
+
+    <div class="grid">
+      <main class="card">
+        <section class="balance">
+          <div>
+            <div class="label small">Current Balance</div>
+            <div class="amount" id="balance">$0.00</div>
+            <div class="small" id="netChange">0 transactions</div>
+          </div>
+          <div style="min-width:240px">
+            <div class="label small">Quick Add</div>
+            <form id="txForm" onsubmit="return false;">
+              <input id="desc" placeholder="Description (e.g., Salary, Rent)" required />
+              <input id="amount" placeholder="Amount (e.g., 1200 or -45)" required inputmode="numeric" />
+              <select id="type" title="type">
+                <option value="auto">Auto (based on sign)</option>
+                <option value="income">Income</option>
+                <option value="expense">Expense</option>
+              </select>
+              <button class="btn" id="addBtn">Add</button>
+              <button class="btn secondary" id="clearBtn" type="button">Clear</button>
+            </form>
+          </div>
+        </section>
+
+        <section class="summary" aria-hidden>
+          <div class="pill">
+            <div class="label">Total Income</div>
+            <div class="value" id="income">$0.00</div>
+          </div>
+          <div class="pill">
+            <div class="label">Total Expense</div>
+            <div class="value" id="expense">$0.00</div>
+          </div>
+          <div class="pill">
+            <div class="label">Transactions</div>
+            <div class="value" id="count">0</div>
+          </div>
+        </section>
+
+        <section class="transactions" aria-live="polite">
+          <h3 style="margin:0 0 8px 0">Transactions</h3>
+          <div id="txList"></div>
+        </section>
+      </main>
+
+      <aside class="card sidebar">
+        <h3 style="margin-top:0">Overview</h3>
+        <div class="chartWrap">
+          <canvas id="pie" width="220" height="220" aria-label="Income vs Expense Chart"></canvas>
+        </div>
+        <div style="display:flex; gap:8px; justify-content:space-between; margin-top:12px">
+          <div>
+            <div class="small">Top Income</div>
+            <div id="topIncome" class="label">—</div>
+          </div>
+          <div>
+            <div class="small">Top Expense</div>
+            <div id="topExpense" class="label">—</div>
+          </div>
+        </div>
+
+        <footer>
+          Built for repository demo — data stored in your browser (localStorage)
+        </footer>
+      </aside>
+    </div>
+  </div>
+
+  <script>
+    // Simple finance tracker logic
+    const STORAGE_KEY = 'ft_transactions_v1';
+    let transactions = [];
+
+    // Utils
+    const $ = (id) => document.getElementById(id);
+    const formatCurrency = (n) => {
+      const sign = n < 0 ? '-' : '';
+      return sign + '$' + Math.abs(n).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2});
+    }
+    const todayISO = () => new Date().toISOString().slice(0,10);
+
+    // Persistence
+    function save(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(transactions)); }
+    function load(){
+      try{
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if(raw) transactions = JSON.parse(raw);
+      }catch(e){ transactions = []; }
+    }
+
+    // CRUD
+    function addTransaction(desc, amount, type){
+      const value = Number(amount);
+      if(!desc || Number.isNaN(value) || value === 0) return false;
+      const resolvedType = (type === 'auto') ? (value >= 0 ? 'income' : 'expense') : type;
+      const tx = {id: Date.now()+Math.random(), desc: desc.trim(), amount: value, type: resolvedType, date: todayISO() };
+      transactions.unshift(tx);
+      save(); render();
+      return true;
+    }
+    function removeTransaction(id){ transactions = transactions.filter(t => t.id !== id); save(); render(); }
+
+    // Render
+    function render(){
+      const txList = $('txList'); txList.innerHTML = '';
+      let income = 0, expense = 0;
+      if(transactions.length === 0){ txList.innerHTML = '<div class="small">No transactions yet — add one using the form.</div>'; }
+      transactions.forEach(tx => {
+        const el = document.createElement('div'); el.className = 'tx';
+        const avatar = document.createElement('div'); avatar.className = 'avatar'; avatar.textContent = tx.desc.slice(0,2).toUpperCase();
+        const meta = document.createElement('div'); meta.className = 'meta';
+        const desc = document.createElement('div'); desc.className = 'desc';
+        const title = document.createElement('div'); title.className = 'title'; title.textContent = tx.desc;
+        const date = document.createElement('div'); date.className = 'date'; date.textContent = tx.date;
+        desc.appendChild(title); desc.appendChild(date);
+        meta.appendChild(avatar); meta.appendChild(desc);
+
+        const right = document.createElement('div');
+        const amt = document.createElement('div'); amt.className = 'amount ' + (tx.amount < 0 ? 'negative' : 'positive'); amt.textContent = formatCurrency(tx.amount);
+        const rem = document.createElement('button'); rem.className = 'btn secondary'; rem.style.padding='6px 8px'; rem.style.fontSize='13px'; rem.textContent = 'Delete';
+        rem.onclick = ()=> removeTransaction(tx.id);
+        right.appendChild(amt); right.appendChild(rem);
+
+        el.appendChild(meta); el.appendChild(right);
+        txList.appendChild(el);
+
+        if(tx.amount >= 0) income += tx.amount; else expense += Math.abs(tx.amount);
+      });
+
+      const balance = income - expense;
+      $('balance').textContent = formatCurrency(balance);
+      $('income').textContent = formatCurrency(income);
+      $('expense').textContent = formatCurrency(expense);
+      $('count').textContent = transactions.length;
+      $('netChange').textContent = transactions.length + (transactions.length===1? ' transaction' : ' transactions');
+
+      // Top income/expense
+      const topInc = transactions.filter(t => t.amount>0).sort((a,b)=>b.amount-a.amount)[0];
+      const topExp = transactions.filter(t => t.amount<0).sort((a,b)=>Math.abs(b.amount)-Math.abs(a.amount))[0];
+      $('topIncome').textContent = topInc ? `${topInc.desc} — ${formatCurrency(topInc.amount)}` : '—';
+      $('topExpense').textContent = topExp ? `${topExp.desc} — ${formatCurrency(topExp.amount)}` : '—';
+
+      drawPie(income, expense);
+    }
+
+    // Pie chart (income vs expense)
+    function drawPie(income, expense){
+      const canvas = $('pie');
+      const ctx = canvas.getContext('2d');
+      const dpr = window.devicePixelRatio || 1;
+      const size = 220;
+      canvas.width = size * dpr; canvas.height = size * dpr; canvas.style.width = size+'px'; canvas.style.height = size+'px';
+      ctx.scale(dpr,dpr);
+      ctx.clearRect(0,0,size,size);
+      const total = income + expense;
+      const cx = size/2, cy = size/2, r = Math.min(cx,cy) - 8;
+      // background circle
+      ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.fillStyle='rgba(255,255,255,0.03)'; ctx.fill();
+      if(total === 0){
+        ctx.fillStyle = 'rgba(255,255,255,0.06)'; ctx.font='12px system-ui'; ctx.textAlign='center'; ctx.fillText('No data',cx,cy+4); return;
+      }
+      let start = -Math.PI/2;
+      const incAngle = (income/total)*Math.PI*2;
+      const expAngle = (expense/total)*Math.PI*2;
+      // income slice
+      ctx.beginPath(); ctx.moveTo(cx,cy); ctx.arc(cx,cy,r,start,start+incAngle); ctx.closePath(); ctx.fillStyle='rgba(79,70,229,0.9)'; ctx.fill();
+      start += incAngle;
+      // expense slice
+      ctx.beginPath(); ctx.moveTo(cx,cy); ctx.arc(cx,cy,r,start,start+expAngle); ctx.closePath(); ctx.fillStyle='rgba(239,68,68,0.9)'; ctx.fill();
+      // hole
+      ctx.beginPath(); ctx.arc(cx,cy,r*0.55,0,Math.PI*2); ctx.fillStyle='rgba(6,9,17,1)'; ctx.fill();
+      // legend
+      ctx.font='12px system-ui'; ctx.textAlign='left';
+      ctx.fillStyle='rgba(79,70,229,0.9)'; ctx.fillRect(12,size-56,10,10); ctx.fillStyle='rgba(255,255,255,0.9)'; ctx.fillText('Income '+ (total? '('+Math.round((income/total)*100)+'%)' : ''), 30, size-46);
+      ctx.fillStyle='rgba(239,68,68,0.9)'; ctx.fillRect(12,size-36,10,10); ctx.fillStyle='rgba(255,255,255,0.9)'; ctx.fillText('Expense '+ (total? '('+Math.round((expense/total)*100)+'%)' : ''), 30, size- -26);
+    }
+
+    // Form handlers
+    function setupForm(){
+      const form = $('txForm');
+      $('addBtn').addEventListener('click', ()=>{
+        const desc = $('desc').value;
+        const amt = $('amount').value.replace(/[^0-9.-]/g,'');
+        const type = $('type').value;
+        if(addTransaction(desc, amt, type)){
+          $('desc').value=''; $('amount').value=''; $('type').value='auto';
+        } else {
+          alert('Please provide a valid description and non-zero amount.');
+        }
+      });
+      $('clearBtn').addEventListener('click', ()=>{ $('desc').value=''; $('amount').value=''; $('type').value='auto'; });
+
+      // quick-add with Enter on amount
+      $('amount').addEventListener('keydown', (e)=>{ if(e.key === 'Enter'){ $('addBtn').click(); } });
+    }
+
+    // Initialize
+    (function init(){ load(); setupForm(); render(); })();
+
+    // For demo: expose some helpers on window (optional)
+    window.FT = {addTransaction, removeTransaction, transactions};
+  </script>
+</body>
+</html>
